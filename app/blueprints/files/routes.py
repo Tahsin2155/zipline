@@ -442,3 +442,68 @@ def move_file(file_id):
     conn.close()
 
     return jsonify({'success': True})
+
+
+@files_bp.route('/folders/<int:folder_id>/move', methods=['POST'])
+@login_required
+def move_folder(folder_id):
+    """
+    Move a folder (and everything nested inside it) into a different
+    parent folder, or to root if target_id is omitted.
+
+    Guards against:
+      - moving a folder into itself
+      - moving a folder into one of its own descendants (which would
+        create a cycle / orphan the branch)
+    """
+    username = session['username']
+    target_id = request.form.get('target_id', type=int)  # None = move to root
+
+    conn = get_user_db(username)
+    cursor = conn.cursor()
+
+    cursor.execute('SELECT id FROM folders WHERE id = ?', (folder_id,))
+    if cursor.fetchone() is None:
+        conn.close()
+        return jsonify({'success': False, 'message': 'Folder not found'}), 404
+
+    if target_id == folder_id:
+        conn.close()
+        return jsonify({'success': False, 'message': 'A folder cannot be moved into itself'}), 400
+
+    if target_id is not None:
+        cursor.execute('SELECT id FROM folders WHERE id = ?', (target_id,))
+        if cursor.fetchone() is None:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Target folder not found'}), 404
+
+        # Prevent moving a folder into one of its own descendants.
+        descendant_ids = subfolder_ids_recursive(cursor, folder_id)
+        if target_id in descendant_ids:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Cannot move a folder into its own subfolder'}), 400
+
+    cursor.execute('UPDATE folders SET parent_id = ? WHERE id = ?', (target_id, folder_id))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'success': True})
+
+
+@files_bp.route('/folders/list')
+@login_required
+def list_folders():
+    """
+    Return a flat list of all folders (id, name, parent_id) for the
+    current user, used to populate the "move to..." folder picker in the UI.
+    """
+    username = session['username']
+    conn = get_user_db(username)
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, name, parent_id FROM folders ORDER BY name COLLATE NOCASE')
+    rows = cursor.fetchall()
+    conn.close()
+
+    return jsonify({
+        'folders': [{'id': r[0], 'name': r[1], 'parent_id': r[2]} for r in rows]
+    })

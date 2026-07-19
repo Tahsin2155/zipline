@@ -1,0 +1,5 @@
+app/__pycache__/
+__pycache__/
+app/blueprints/auth/__pycache__/
+app/blueprints/files/__pycache__/
+app/blueprints/notes/__pycache__/

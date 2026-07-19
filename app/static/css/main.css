@@ -305,6 +305,19 @@ hr {
     max-width: 320px;
 }
 
+/* Move-to folder picker */
+#moveModalTree .list-group-item {
+    border-left: none;
+    border-right: none;
+    font-size: 0.9rem;
+}
+#moveModalTree .list-group-item:first-child {
+    border-top: none;
+}
+#moveModalTree .list-group-item.disabled {
+    background-color: #f8fafc;
+}
+
 /* Preview modal */
 #previewModal .modal-body {
     max-height: 75vh;
