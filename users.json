@@ -1,0 +1,7 @@
+{
+    "developer": {
+        "password": "scrypt:32768:8:1$QQBDcezwIoHDBYiS$14a9476a71a3358f416fa3c9341fcdae85901dbff9ecd463aa2a405f2b878b090c7ec0c24292083f8f8eba63e89df1a248d797e1e998301f5a9640f93505c00c",
+        "failed_logins": 0,
+        "locked_until": null
+    }
+}

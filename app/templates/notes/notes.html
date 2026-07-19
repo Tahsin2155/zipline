@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Scratchpad - Data Transfer Interface{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="section-title mb-0">Scratchpad</h5>
+    <div class="d-flex align-items-center gap-2">
+        <span class="notes-status" id="notesStatus">
+            {% if updated_at %}Last saved {{ updated_at }}{% else %}Not saved yet{% endif %}
+        </span>
+        <button type="button" class="btn btn-light btn-sm" id="copyNotesBtn"><i class="bi bi-clipboard"></i> Copy</button>
+    </div>
+</div>
+
+<textarea class="notes-textarea" id="notesArea" placeholder="Write anything here — it autosaves and isn't tied to any file.">{{ content }}</textarea>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const csrfToken = '{{ csrf_token() }}';
+    const textarea = document.getElementById('notesArea');
+    const status = document.getElementById('notesStatus');
+    let saveTimeout = null;
+
+    function saveNotes() {
+        const formData = new FormData();
+        formData.append('content', textarea.value);
+        formData.append('csrf_token', csrfToken);
+
+        status.textContent = 'Saving...';
+        fetch('{{ url_for("notes.save") }}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData
+        })
+        .then(r => r.json())
+        .then(data => {
+            status.textContent = data.success ? `Last saved ${data.saved_at}` : 'Failed to save';
+        })
+        .catch(() => { status.textContent = 'Failed to save (offline?)'; });
+    }
+
+    textarea.addEventListener('input', () => {
+        clearTimeout(saveTimeout);
+        status.textContent = 'Typing...';
+        saveTimeout = setTimeout(saveNotes, 800);
+    });
+
+    // Save on page leave too, in case the debounce hasn't fired yet.
+    window.addEventListener('beforeunload', () => {
+        if (saveTimeout) { clearTimeout(saveTimeout); saveNotes(); }
+    });
+
+    document.getElementById('copyNotesBtn').addEventListener('click', () => {
+        navigator.clipboard.writeText(textarea.value).then(() => {
+            const btn = document.getElementById('copyNotesBtn');
+            const original = btn.innerHTML;
+            btn.innerHTML = '<i class="bi bi-check2"></i> Copied';
+            setTimeout(() => { btn.innerHTML = original; }, 1500);
+        });
+    });
+</script>
+{% endblock %}

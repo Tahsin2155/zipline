@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Data Transfer Interface{% endblock %}
+
+{% block content %}
+<div class="row g-4 my-2">
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-body p-4">
+                <h5 class="section-title">Upload Documents</h5>
+                <form id="uploadForm" method="POST" action="{{ url_for('files.upload') }}" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="folder_id" value="{{ current_folder_id or '' }}">
+                    <div class="upload-area" id="uploadArea">
+                        <input type="file" id="fileInput" name="file" style="display: none" multiple>
+                        <i class="bi bi-cloud-upload upload-icon"></i>
+                        <p class="mb-1 fw-medium text-dark">Click here or drag files to upload</p>
+                        <p class="small text-muted mb-0">
+                            {% if current_folder_id %}Uploading into current folder{% else %}Uploading to root{% endif %}
+                             • Max size: 100MB
+                        </p>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-5">
+        <div class="card stats-card">
+            <div class="card-body p-4">
+                <h5 class="section-title">Usage Statistics</h5>
+                <div class="row w-100">
+                    <div class="col-6 stat-item">
+                        <div class="stat-label">Total Files</div>
+                        <div class="stat-value">{{ file_count }}</div>
+                    </div>
+                    <div class="col-6 stat-item">
+                        <div class="stat-label">Storage Used</div>
+                        <div class="stat-value"><span>{{ total_size_mb }}</span> <span class="fs-5 text-muted fw-medium">MB</span></div>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <div class="d-flex justify-content-between">
+                        <span class="stat-label mb-0">Quota</span>
+                        <span class="small text-muted">{{ total_size_mb }} / {{ quota_mb }} MB</span>
+                    </div>
+                    <div class="quota-bar">
+                        <div class="quota-bar-fill {% if quota_percent >= 90 %}danger{% elif quota_percent >= 70 %}warn{% endif %}" style="width: {{ quota_percent }}%;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-4 mb-2">
+    <div class="breadcrumb-bar mb-0">
+        <a href="{{ url_for('files.dashboard') }}"><i class="bi bi-house-door"></i> Root</a>
+        {% for crumb in breadcrumbs %}
+            <span class="breadcrumb-sep">/</span>
+            <a href="{{ url_for('files.dashboard', folder=crumb.id) }}">{{ crumb.name }}</a>
+        {% endfor %}
+    </div>
+
+    <div class="d-flex gap-2">
+        <form class="d-flex search-box" method="GET" action="{{ url_for('files.dashboard') }}">
+            <input type="text" name="q" class="form-control form-control-sm" placeholder="Search files..." value="{{ search_query }}">
+        </form>
+        <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#newFolderModal">
+            <i class="bi bi-folder-plus"></i> New folder
+        </button>
+    </div>
+</div>
+
+{% if not search_query %}
+<div class="folder-grid">
+    {% for folder in subfolders %}
+    <div class="folder-card" data-folder-id="{{ folder.id }}">
+        <i class="bi bi-folder-fill"></i>
+        <span class="folder-name" onclick="window.location.href='{{ url_for('files.dashboard', folder=folder.id) }}'">{{ folder.name }}</span>
+        <div class="dropdown">
+            <button class="folder-menu-btn" data-bs-toggle="dropdown"><i class="bi bi-three-dots-vertical"></i></button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item rename-folder-btn" href="#" data-folder-id="{{ folder.id }}" data-folder-name="{{ folder.name }}">Rename</a></li>
+                <li><a class="dropdown-item text-danger delete-folder-btn" href="#" data-folder-id="{{ folder.id }}" data-folder-name="{{ folder.name }}">Delete</a></li>
+            </ul>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="card mt-2 mb-5">
+    <div class="card-body p-0">
+        <div class="p-4 border-bottom border-light border-2 d-flex justify-content-between align-items-center">
+            <h5 class="section-title mb-0">{% if search_query %}Search results for "{{ search_query }}"{% else %}Files{% endif %}</h5>
+        </div>
+
+        {% if files %}
+            <div class="file-list">
+                {% for file in files %}
+                <div class="file-row">
+                    <div class="file-info" {% if file.previewable %}onclick="openPreview({{ file.id }}, '{{ file.filename | e }}', '{{ file.extension }}')"{% endif %}>
+                        <div class="file-type-icon">
+                            {% if file.extension in ['png','jpg','jpeg','gif','webp','svg','bmp','ico'] %}
+                                <i class="bi bi-file-image"></i>
+                            {% elif file.extension == 'pdf' %}
+                                <i class="bi bi-file-earmark-pdf"></i>
+                            {% elif file.extension in ['py','js','jsx','ts','tsx','html','htm','css','json','c','h','cpp','java','rb','go','rs','php','sql'] %}
+                                <i class="bi bi-file-earmark-code"></i>
+                            {% else %}
+                                <i class="bi bi-file-earmark-text"></i>
+                            {% endif %}
+                        </div>
+                        <div class="min-w-0">
+                            <div class="file-name">{{ file.filename }}</div>
+                            <div class="file-meta">
+                                <span>{{ file.upload_date[:10] }}</span> • <span>{{ file.size }}</span>
+                                {% if search_query and file.folder_id %}• <span class="fst-italic">in subfolder</span>{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="file-actions">
+                        {% if file.previewable %}
+                        <button type="button" class="btn btn-light" title="Preview" onclick="openPreview({{ file.id }}, '{{ file.filename | e }}', '{{ file.extension }}')">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                        {% endif %}
+                        <a href="{{ url_for('files.download', file_id=file.id) }}" class="btn btn-light" title="Download">
+                            <i class="bi bi-download"></i>
+                        </a>
+                        <button type="button" class="btn btn-danger delete-file-btn" data-file-id="{{ file.id }}" data-file-name="{{ file.filename }}" title="Delete">
+                            <i class="bi bi-trash3"></i>
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="d-flex justify-content-between align-items-center p-3 border-top border-light">
+                <a class="btn btn-light btn-sm {% if page <= 1 %}disabled{% endif %}"
+                   href="{{ url_for('files.dashboard', page=page-1, folder=current_folder_id, q=search_query) if page > 1 else '#' }}">Previous</a>
+                <span class="small text-muted">Page {{ page }} of {{ total_pages }}</span>
+                <a class="btn btn-light btn-sm {% if page >= total_pages %}disabled{% endif %}"
+                   href="{{ url_for('files.dashboard', page=page+1, folder=current_folder_id, q=search_query) if page < total_pages else '#' }}">Next</a>
+            </div>
+        {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-folder2-open fs-1 text-muted mb-3 d-block"></i>
+                <p class="text-muted mb-0">
+                    {% if search_query %}No files matched your search.{% else %}No files here yet. Start by uploading a file above.{% endif %}
+                </p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- New folder modal -->
+<div class="modal fade" id="newFolderModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('files.create_folder') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="parent_id" value="{{ current_folder_id or '' }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">New folder</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label">Folder name</label>
+                    <input type="text" class="form-control" name="name" maxlength="100" required autofocus>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Rename folder modal -->
+<div class="modal fade" id="renameFolderModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Rename folder</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label">New name</label>
+                <input type="text" class="form-control" id="renameFolderInput" maxlength="100" required>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="renameFolderConfirm">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Preview modal -->
+<div class="modal fade" id="previewModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="previewModalTitle">Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="previewModalBody">
+                <div class="text-center text-muted py-4">Loading preview...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const csrfToken = '{{ csrf_token() }}';
+
+    // --- Upload drag/drop ---
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+
+    uploadArea.addEventListener('click', () => fileInput.click());
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        uploadArea.addEventListener(eventName, e => { e.preventDefault(); e.stopPropagation(); });
+    });
+    uploadArea.addEventListener('dragover', () => uploadArea.classList.add('dragover'));
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+    uploadArea.addEventListener('drop', (e) => {
+        uploadArea.classList.remove('dragover');
+        fileInput.files = e.dataTransfer.files;
+        document.getElementById('uploadForm').submit();
+    });
+    fileInput.addEventListener('change', () => {
+        if (fileInput.files.length > 0) document.getElementById('uploadForm').submit();
+    });
+
+    // --- Delete file ---
+    function deleteFile(fileId, filename) {
+        if (!confirm(`Are you sure you want to delete "${filename}"?`)) return;
+        fetch(`/delete/${fileId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) location.reload();
+            else alert('Error: ' + data.message);
+        });
+    }
+    document.querySelectorAll('.delete-file-btn').forEach(btn => {
+        btn.addEventListener('click', () => deleteFile(btn.dataset.fileId, btn.dataset.fileName));
+    });
+
+    // --- Delete folder ---
+    document.querySelectorAll('.delete-folder-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const folderId = btn.dataset.folderId;
+            const folderName = btn.dataset.folderName;
+            if (!confirm(`Delete folder "${folderName}" and everything inside it? This cannot be undone.`)) return;
+            fetch(`/folders/${folderId}/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) window.location.href = data.redirect;
+                else alert('Error: ' + data.message);
+            });
+        });
+    });
+
+    // --- Rename folder ---
+    let renameFolderId = null;
+    const renameFolderModal = new bootstrap.Modal(document.getElementById('renameFolderModal'));
+    document.querySelectorAll('.rename-folder-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            renameFolderId = btn.dataset.folderId;
+            document.getElementById('renameFolderInput').value = btn.dataset.folderName;
+            renameFolderModal.show();
+        });
+    });
+    document.getElementById('renameFolderConfirm').addEventListener('click', () => {
+        const newName = document.getElementById('renameFolderInput').value.trim();
+        if (!newName) return;
+        const formData = new FormData();
+        formData.append('name', newName);
+        formData.append('csrf_token', csrfToken);
+        fetch(`/folders/${renameFolderId}/rename`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) location.reload();
+            else alert('Error: ' + data.message);
+        });
+    });
+
+    // --- Preview ---
+    const previewModal = new bootstrap.Modal(document.getElementById('previewModal'));
+    const IMAGE_EXT = ['png','jpg','jpeg','gif','webp','svg','bmp','ico'];
+    const PDF_EXT = ['pdf'];
+
+    function openPreview(fileId, filename, extension) {
+        document.getElementById('previewModalTitle').textContent = filename;
+        const body = document.getElementById('previewModalBody');
+        body.innerHTML = '<div class="text-center text-muted py-4">Loading preview...</div>';
+        previewModal.show();
+
+        if (IMAGE_EXT.includes(extension)) {
+            body.innerHTML = `<img src="/preview/${fileId}" alt="${filename}">`;
+        } else if (PDF_EXT.includes(extension)) {
+            body.innerHTML = `<iframe src="/preview/${fileId}"></iframe>`;
+        } else {
+            fetch(`/preview/${fileId}`)
+                .then(r => r.json())
+                .then(data => {
+                    const escaped = data.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    let html = `<pre>${escaped}</pre>`;
+                    if (data.truncated) {
+                        html += `<p class="text-muted small text-center mb-0">Preview truncated — <a href="/download/${fileId}">download the full file</a> to see everything.</p>`;
+                    }
+                    body.innerHTML = html;
+                })
+                .catch(() => {
+                    body.innerHTML = '<p class="text-muted text-center py-4">Could not load preview.</p>';
+                });
+        }
+    }
+</script>
+{% endblock %}
