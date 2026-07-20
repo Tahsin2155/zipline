@@ -244,21 +244,37 @@ def delete_folder(folder_id):
     return jsonify({'success': True, 'redirect': url_for('files.dashboard', folder=parent_id)})
 
 
+def _wants_json():
+    return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+
 @files_bp.route('/upload', methods=['POST'])
 @login_required
 def upload():
-    """Handle file upload into the current folder."""
+    """Handle file upload into the current folder.
+
+    Supports two callers:
+      - The dashboard's XHR-based uploader (sends X-Requested-With header),
+        which gets a JSON response so it can show per-file progress/result.
+      - A plain HTML form fallback (e.g. JS disabled), which gets the
+        original flash+redirect behavior.
+    """
     username = session['username']
     folder_id = request.form.get('folder_id', type=int)
+    wants_json = _wants_json()
+
+    def respond(success, message, status=200):
+        if wants_json:
+            return jsonify({'success': success, 'message': message}), status
+        flash(message, 'success' if success else 'warning')
+        return redirect(url_for('files.dashboard', folder=folder_id))
 
     if 'file' not in request.files:
-        flash('No file selected.', 'warning')
-        return redirect(url_for('files.dashboard', folder=folder_id))
+        return respond(False, 'No file selected.', 400)
 
     files_to_upload = request.files.getlist('file')
     if not files_to_upload or all(f.filename == '' for f in files_to_upload):
-        flash('No file selected.', 'warning')
-        return redirect(url_for('files.dashboard', folder=folder_id))
+        return respond(False, 'No file selected.', 400)
 
     conn = get_user_db(username)
     cursor = conn.cursor()
@@ -316,18 +332,18 @@ def upload():
         conn.commit()
         conn.close()
 
-        if successful_uploads:
-            flash(f'Uploaded {successful_uploads} file(s) successfully.', 'success')
+        if successful_uploads and not rejected:
+            return respond(True, f'Uploaded {successful_uploads} file(s) successfully.')
+        if successful_uploads and rejected:
+            return respond(True, f'Uploaded, but skipped: {"; ".join(rejected)}')
         if rejected:
-            flash('Skipped: ' + '; '.join(rejected), 'warning')
-        if not successful_uploads and not rejected:
-            flash('No valid files were uploaded.', 'warning')
+            return respond(False, 'Skipped: ' + '; '.join(rejected), 400)
+        return respond(False, 'No valid files were uploaded.', 400)
 
     except Exception:
         current_app.logger.exception('Upload failed')
-        flash('Upload failed. Please try again.', 'danger')
-
-    return redirect(url_for('files.dashboard', folder=folder_id))
+        conn.close()
+        return respond(False, 'Upload failed. Please try again.', 500)
 
 
 @files_bp.route('/download/<int:file_id>')

@@ -3,5 +3,10 @@
         "password": "scrypt:32768:8:1$QQBDcezwIoHDBYiS$14a9476a71a3358f416fa3c9341fcdae85901dbff9ecd463aa2a405f2b878b090c7ec0c24292083f8f8eba63e89df1a248d797e1e998301f5a9640f93505c00c",
         "failed_logins": 0,
         "locked_until": null
+    },
+    "public": {
+        "password": "scrypt:32768:8:1$zOwGHFlnvii0qY0q$ad2e33b5928f7671a432d2d97b3bab23dc96c9bbd44471b05c17d68c9e9bdc030859dfeba7a1b41176f0ae9d12b87ccbc2a0daf59f7302fb40c5efdbb44c9b5e",
+        "failed_logins": 0,
+        "locked_until": null
     }
 }

@@ -8,19 +8,18 @@
         <div class="card">
             <div class="card-body p-4">
                 <h5 class="section-title">Upload Documents</h5>
-                <form id="uploadForm" method="POST" action="{{ url_for('files.upload') }}" enctype="multipart/form-data">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="folder_id" value="{{ current_folder_id or '' }}">
-                    <div class="upload-area" id="uploadArea">
-                        <input type="file" id="fileInput" name="file" style="display: none" multiple>
-                        <i class="bi bi-cloud-upload upload-icon"></i>
-                        <p class="mb-1 fw-medium text-dark">Click here or drag files to upload</p>
-                        <p class="small text-muted mb-0">
-                            {% if current_folder_id %}Uploading into current folder{% else %}Uploading to root{% endif %}
-                             • Max size: 100MB
-                        </p>
-                    </div>
-                </form>
+                <input type="hidden" id="csrfTokenInput" value="{{ csrf_token() }}">
+                <input type="hidden" id="currentFolderId" value="{{ current_folder_id or '' }}">
+                <div class="upload-area" id="uploadArea">
+                    <input type="file" id="fileInput" style="display: none" multiple>
+                    <i class="bi bi-cloud-upload upload-icon"></i>
+                    <p class="mb-1 fw-medium text-dark">Click here or drag files to upload</p>
+                    <p class="small text-muted mb-0">
+                        {% if current_folder_id %}Uploading into current folder{% else %}Uploading to root{% endif %}
+                         • Max size: 100MB
+                    </p>
+                </div>
+                <div id="uploadProgressList" class="mt-3"></div>
             </div>
         </div>
     </div>
@@ -242,9 +241,11 @@
 <script>
     const csrfToken = '{{ csrf_token() }}';
 
-    // --- Upload drag/drop ---
+    // --- Upload with progress ---
     const uploadArea = document.getElementById('uploadArea');
     const fileInput = document.getElementById('fileInput');
+    const progressList = document.getElementById('uploadProgressList');
+    const folderId = document.getElementById('currentFolderId').value;
 
     uploadArea.addEventListener('click', () => fileInput.click());
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -254,12 +255,105 @@
     uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
     uploadArea.addEventListener('drop', (e) => {
         uploadArea.classList.remove('dragover');
-        fileInput.files = e.dataTransfer.files;
-        document.getElementById('uploadForm').submit();
+        if (e.dataTransfer.files.length > 0) startUploads(e.dataTransfer.files);
     });
     fileInput.addEventListener('change', () => {
-        if (fileInput.files.length > 0) document.getElementById('uploadForm').submit();
+        if (fileInput.files.length > 0) startUploads(fileInput.files);
     });
+
+    const UPLOAD_CONCURRENCY = 3; // upload up to N files at once
+    let reloadNeeded = false;
+
+    function startUploads(fileList) {
+        const files = Array.from(fileList);
+        let index = 0;
+        let active = 0;
+        let remaining = files.length;
+
+        function next() {
+            if (index >= files.length) return;
+            const file = files[index++];
+            active++;
+            uploadOneFile(file, () => {
+                active--;
+                remaining--;
+                if (remaining === 0 && reloadNeeded) {
+                    setTimeout(() => location.reload(), 600);
+                }
+                next();
+            });
+        }
+
+        // Kick off up to UPLOAD_CONCURRENCY uploads at once.
+        for (let i = 0; i < Math.min(UPLOAD_CONCURRENCY, files.length); i++) next();
+    }
+
+    function uploadOneFile(file, onDone) {
+        const item = document.createElement('div');
+        item.className = 'upload-progress-item';
+        item.innerHTML = `
+            <div class="upload-progress-header">
+                <span class="upload-progress-name" title="${file.name}">${file.name}</span>
+                <span class="upload-progress-pct">0%</span>
+            </div>
+            <div class="upload-progress-bar"><div class="upload-progress-fill"></div></div>
+            <div class="upload-progress-status"></div>
+        `;
+        progressList.prepend(item);
+
+        const fill = item.querySelector('.upload-progress-fill');
+        const pct = item.querySelector('.upload-progress-pct');
+        const status = item.querySelector('.upload-progress-status');
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('folder_id', folderId);
+        formData.append('csrf_token', document.getElementById('csrfTokenInput').value);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '{{ url_for("files.upload") }}', true);
+        xhr.setRequestHeader('X-CSRFToken', document.getElementById('csrfTokenInput').value);
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+        xhr.upload.addEventListener('progress', (e) => {
+            if (!e.lengthComputable) return;
+            const percent = Math.round((e.loaded / e.total) * 100);
+            fill.style.width = percent + '%';
+            pct.textContent = percent + '%';
+            if (percent >= 100) {
+                status.textContent = 'Processing...';
+            }
+        });
+
+        xhr.addEventListener('load', () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                let message = 'Uploaded';
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    if (data.message) message = data.message;
+                    if (!data.success) throw new Error(message);
+                } catch (e) { /* non-JSON success response is fine */ }
+                fill.classList.add('done');
+                pct.textContent = '100%';
+                status.textContent = message;
+                reloadNeeded = true;
+            } else {
+                fill.classList.add('error');
+                status.classList.add('error');
+                status.textContent = `Failed (${xhr.status})`;
+            }
+            onDone();
+        });
+
+        xhr.addEventListener('error', () => {
+            fill.classList.add('error');
+            status.classList.add('error');
+            status.textContent = 'Network error';
+            onDone();
+        });
+
+        xhr.send(formData);
+    }
 
     // --- Delete file ---
     function deleteFile(fileId, filename) {

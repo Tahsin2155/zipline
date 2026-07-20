@@ -305,6 +305,63 @@ hr {
     max-width: 320px;
 }
 
+/* Upload progress */
+.upload-progress-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    background: #f8fafc;
+}
+.upload-progress-item:last-child {
+    margin-bottom: 0;
+}
+.upload-progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.82rem;
+    margin-bottom: 6px;
+}
+.upload-progress-name {
+    font-weight: 600;
+    color: #1e293b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 70%;
+}
+.upload-progress-pct {
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
+}
+.upload-progress-bar {
+    height: 6px;
+    border-radius: 999px;
+    background-color: #e2e8f0;
+    overflow: hidden;
+}
+.upload-progress-fill {
+    height: 100%;
+    background-color: #0f172a;
+    transition: width 0.15s linear;
+    width: 0%;
+}
+.upload-progress-fill.done {
+    background-color: #16a34a;
+}
+.upload-progress-fill.error {
+    background-color: #ef4444;
+}
+.upload-progress-status {
+    font-size: 0.78rem;
+    color: #94a3b8;
+    margin-top: 4px;
+}
+.upload-progress-status.error {
+    color: #ef4444;
+}
+
 /* Move-to folder picker */
 #moveModalTree .list-group-item {
     border-left: none;
