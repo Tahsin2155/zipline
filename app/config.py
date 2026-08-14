@@ -12,7 +12,7 @@ class Config:
 
     MAX_FILE_SIZE = 100 * 1024 * 1024        # 100MB per file
     MAX_CONTENT_LENGTH = 100 * 1024 * 1024   # 100MB per request
-    USER_STORAGE_QUOTA = 75 * 1024 * 1024  # 75MB per user (adjust for your PA plan's disk quota)
+    USER_STORAGE_QUOTA = 100 * 1024 * 1024  # 75MB per user (adjust for your PA plan's disk quota)
 
     FILE_RETENTION_DAYS = 5
     FILES_PER_PAGE = 25

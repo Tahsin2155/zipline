@@ -304,6 +304,9 @@ hr {
 .search-box {
     max-width: 320px;
 }
+.back-btn i {
+    font-size: 0.9em;
+}
 
 /* Upload progress */
 .upload-progress-item {
