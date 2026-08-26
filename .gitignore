@@ -3,3 +3,6 @@ __pycache__/
 app/blueprints/auth/__pycache__/
 app/blueprints/files/__pycache__/
 app/blueprints/notes/__pycache__/
+databases
+uploads
+users.json
