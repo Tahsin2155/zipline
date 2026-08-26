@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Scratchpad - DTI{% endblock %}
+{% block title %}Scratchpad - Zipline{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -90,7 +90,7 @@
 {% if notes %}
 <div class="notes-grid">
     {% for note in notes %}
-    <div class="note-card" data-note-id="{{ note.id }}" onclick="if (!event.target.closest('.dropdown')) window.location.href='{{ url_for('notes.view', id=note.id) }}';">
+    <div class="note-card" data-note-id="{{ note.id }}" data-note-url="{{ url_for('notes.view', id=note.id) }}">
         <div class="note-card-header">
             <span class="note-title">{{ note.title }}</span>
             <div class="dropdown">
@@ -144,6 +144,14 @@
 {% block extra_js %}
 <script>
     const csrfToken = '{{ csrf_token() }}';
+
+    document.querySelectorAll('.note-card').forEach(noteCard => {
+        noteCard.addEventListener('click', (event) => {
+            if (!event.target.closest('.dropdown')) {
+                window.location.href = noteCard.dataset.noteUrl;
+            }
+        });
+    });
 
     document.getElementById('newNoteBtn').addEventListener('click', () => {
         const formData = new FormData();

@@ -8,7 +8,7 @@ local Flask app might use will not work reliably there. Instead:
 
   1. Go to the "Tasks" tab on PythonAnywhere.
   2. Add a new scheduled task (e.g. daily at 03:00) running:
-         python3.x /home/<youruser>/dti/cleanup_task.py
+         python3.x /home/<youruser>/zipline/cleanup_task.py
   3. That's it -- this script runs once, deletes expired files, and exits.
 
 Run locally with:

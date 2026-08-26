@@ -6,7 +6,7 @@ import `application` from here, e.g. add near the bottom of the
 auto-generated /var/www/<you>_pythonanywhere_com_wsgi.py:
 
     import sys
-    path = '/home/<youruser>/dti'
+    path = '/home/<youruser>/zipline'
     if path not in sys.path:
         sys.path.insert(0, path)
 

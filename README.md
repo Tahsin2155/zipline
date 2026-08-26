@@ -1,4 +1,4 @@
-# Data Transfer Interface (DTI)
+# Zipline
 
 A personal, self-hosted file transfer app: login, per-user storage, nested
 folders, search, inline previews (images / PDFs / text-code), and a
@@ -33,15 +33,15 @@ plain HTTP locally. Don't set it in production.
 
 ## Deploying on PythonAnywhere
 
-1. Upload/clone this project to somewhere like `/home/<you>/dti`.
+1. Upload/clone this project to somewhere like `/home/<you>/zipline`.
 2. In a Bash console: `pip install --user -r requirements.txt`.
 3. Create at least one user: `python manage_users.py yourname`.
 4. On the **Web** tab, create a new web app (manual config, any Python version 3.10+).
-5. Set the **source code** directory to `/home/<you>/dti`.
+5. Set the **source code** directory to `/home/<you>/zipline`.
 6. Edit the auto-generated WSGI file (linked from the Web tab) so it ends with:
    ```python
    import sys
-   path = '/home/<you>/dti'
+  path = '/home/<you>/zipline'
    if path not in sys.path:
        sys.path.insert(0, path)
 
@@ -61,7 +61,7 @@ app. Instead, use PythonAnywhere's **Tasks** tab:
 1. Go to the **Tasks** tab.
 2. Add a scheduled task (daily, e.g. 03:00) running:
    ```
-   python3.x /home/<you>/dti/cleanup_task.py
+  python3.x /home/<you>/zipline/cleanup_task.py
    ```
 3. That script runs once, deletes files older than `FILE_RETENTION_DAYS`
    (default 5, override with `--retention-days N`), and exits.
