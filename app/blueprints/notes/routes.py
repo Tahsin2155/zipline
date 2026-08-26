@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from flask import jsonify, render_template, request, session
+from flask import jsonify, redirect, render_template, request, session, url_for
 
 from app.blueprints.notes import notes_bp
 from app.db import get_user_db
@@ -8,6 +8,7 @@ from app.decorators import login_required
 
 MAX_NOTE_LENGTH = 200_000  # generous cap so a runaway paste can't blow up the db file
 MAX_TITLE_LENGTH = 100
+PREVIEW_LENGTH = 140
 
 
 def _next_sort_order(cursor):
@@ -15,34 +16,55 @@ def _next_sort_order(cursor):
     return cursor.fetchone()[0]
 
 
+def _make_preview(content):
+    snippet = content.strip().replace('\n', ' ')
+    if len(snippet) > PREVIEW_LENGTH:
+        snippet = snippet[:PREVIEW_LENGTH].rstrip() + '...'
+    return snippet
+
+
 @notes_bp.route('/notes')
 @login_required
 def view():
+    """Grid view of all notes, or the single-note editor when ?id=<id> is given."""
     username = session['username']
+    requested_id = request.args.get('id', type=int)
+
     conn = get_user_db(username)
     cursor = conn.cursor()
-    cursor.execute('SELECT id, title, updated_at FROM notes ORDER BY sort_order ASC, id ASC')
-    notes = cursor.fetchall()
 
-    requested_id = request.args.get('id', type=int)
-    active = None
     if requested_id is not None:
-        cursor.execute('SELECT id, title, content, updated_at FROM notes WHERE id = ?', (requested_id,))
-        active = cursor.fetchone()
+        cursor.execute(
+            'SELECT id, title, content, created_at, updated_at FROM notes WHERE id = ?',
+            (requested_id,)
+        )
+        row = cursor.fetchone()
+        conn.close()
 
-    if active is None and notes:
-        first_id = notes[0][0]
-        cursor.execute('SELECT id, title, content, updated_at FROM notes WHERE id = ?', (first_id,))
-        active = cursor.fetchone()
+        if not row:
+            return redirect(url_for('notes.view'))
 
+        note = {
+            'id': row[0], 'title': row[1], 'content': row[2],
+            'created_at': row[3], 'updated_at': row[4],
+        }
+        return render_template('notes/note_editor.html', username=username, note=note)
+
+    cursor.execute(
+        'SELECT id, title, content, created_at, updated_at FROM notes ORDER BY sort_order ASC, id ASC'
+    )
+    rows = cursor.fetchall()
     conn.close()
 
-    return render_template(
-        'notes/notes.html',
-        username=username,
-        notes=notes,
-        active=active,
-    )
+    notes = [
+        {
+            'id': r[0], 'title': r[1], 'preview': _make_preview(r[2]),
+            'created_at': r[3], 'updated_at': r[4],
+        }
+        for r in rows
+    ]
+
+    return render_template('notes/notes.html', username=username, notes=notes)
 
 
 @notes_bp.route('/notes/new', methods=['POST'])
@@ -66,25 +88,6 @@ def new():
     return jsonify({
         'success': True,
         'note': {'id': row[0], 'title': row[1], 'updated_at': row[2]}
-    })
-
-
-@notes_bp.route('/notes/<int:note_id>')
-@login_required
-def get_note(note_id):
-    username = session['username']
-    conn = get_user_db(username)
-    cursor = conn.cursor()
-    cursor.execute('SELECT id, title, content, updated_at FROM notes WHERE id = ?', (note_id,))
-    row = cursor.fetchone()
-    conn.close()
-
-    if not row:
-        return jsonify({'success': False, 'message': 'Note not found.'}), 404
-
-    return jsonify({
-        'success': True,
-        'note': {'id': row[0], 'title': row[1], 'content': row[2], 'updated_at': row[3]}
     })
 
 
@@ -154,13 +157,6 @@ def delete(note_id):
         return jsonify({'success': False, 'message': 'Note not found.'}), 404
 
     conn.commit()
-
-    cursor.execute('SELECT id, title, updated_at FROM notes ORDER BY sort_order ASC, id ASC LIMIT 1')
-    next_row = cursor.fetchone()
     conn.close()
 
-    next_note = None
-    if next_row:
-        next_note = {'id': next_row[0], 'title': next_row[1], 'updated_at': next_row[2]}
-
-    return jsonify({'success': True, 'next_note': next_note})
+    return jsonify({'success': True})

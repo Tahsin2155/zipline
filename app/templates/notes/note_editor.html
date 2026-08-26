@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}{{ note.title }} - Scratchpad - DTI{% endblock %}
+
+{% block extra_css %}
+<style>
+.note-editor-header {
+    margin-bottom: 14px;
+}
+.note-editor-topline {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+.note-editor-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.note-editor-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+.note-editor-meta {
+    font-size: 0.78rem;
+    color: #94a3b8;
+}
+.notes-textarea {
+    width: 100%;
+    min-height: 55vh;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.92rem;
+    color: #1e293b;
+    resize: vertical;
+}
+.notes-textarea:focus {
+    outline: none;
+    border-color: #94a3b8;
+    box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.05);
+}
+.notes-status {
+    font-size: 0.8rem;
+    color: #94a3b8;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-2">
+    <a href="{{ url_for('notes.view') }}" class="text-decoration-none" style="font-size: 0.85rem; color: #64748b;">
+        <i class="bi bi-arrow-left"></i> All notes
+    </a>
+</div>
+
+<div class="note-editor-header">
+    <div class="note-editor-topline">
+        <h5 class="note-editor-title" id="noteTitleDisplay">{{ note.title }}</h5>
+        <div class="note-editor-actions">
+            <span class="notes-status" id="notesStatus">
+                {% if note.updated_at %}Last saved {{ note.updated_at }}{% endif %}
+            </span>
+            <button type="button" class="btn btn-light btn-sm" id="copyNotesBtn" title="Copy"><i class="bi bi-clipboard"></i></button>
+            <div class="dropdown">
+                <button class="btn btn-light btn-sm" data-bs-toggle="dropdown" title="More"><i class="bi bi-three-dots-vertical"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="#" id="renameNoteBtn">Rename</a></li>
+                    <li><a class="dropdown-item text-danger" href="#" id="deleteNoteBtn">Delete</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="note-editor-meta">
+        Created {{ note.created_at }}
+    </div>
+</div>
+
+<textarea class="notes-textarea" id="notesArea" placeholder="Write anything here — it autosaves and isn't tied to any file.">{{ note.content }}</textarea>
+
+<!-- Rename note modal -->
+<div class="modal fade" id="renameNoteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Rename note</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label">New name</label>
+                <input type="text" class="form-control" id="renameNoteInput" maxlength="100" value="{{ note.title }}" required>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="renameNoteConfirm">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const csrfToken = '{{ csrf_token() }}';
+    const noteId = Number('{{ note.id }}');
+    const textarea = document.getElementById('notesArea');
+    const status = document.getElementById('notesStatus');
+    let saveTimeout = null;
+
+    function saveNotes() {
+        const formData = new FormData();
+        formData.append('content', textarea.value);
+        formData.append('csrf_token', csrfToken);
+
+        status.textContent = 'Saving...';
+        fetch(`/notes/${noteId}/save`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData
+        })
+        .then(r => r.json())
+        .then(data => {
+            status.textContent = data.success ? `Last saved ${data.saved_at}` : 'Failed to save';
+        })
+        .catch(() => { status.textContent = 'Failed to save (offline?)'; });
+    }
+
+    textarea.addEventListener('input', () => {
+        clearTimeout(saveTimeout);
+        status.textContent = 'Typing...';
+        saveTimeout = setTimeout(saveNotes, 800);
+    });
+
+    // Save on page leave too, in case the debounce hasn't fired yet.
+    window.addEventListener('beforeunload', () => {
+        if (saveTimeout) { clearTimeout(saveTimeout); saveNotes(); }
+    });
+
+    document.getElementById('copyNotesBtn').addEventListener('click', () => {
+        navigator.clipboard.writeText(textarea.value).then(() => {
+            const btn = document.getElementById('copyNotesBtn');
+            const original = btn.innerHTML;
+            btn.innerHTML = '<i class="bi bi-check2"></i>';
+            setTimeout(() => { btn.innerHTML = original; }, 1500);
+        });
+    });
+
+    // --- Rename note ---
+    const renameNoteModal = new bootstrap.Modal(document.getElementById('renameNoteModal'));
+    document.getElementById('renameNoteBtn').addEventListener('click', (e) => {
+        e.preventDefault();
+        renameNoteModal.show();
+    });
+    document.getElementById('renameNoteConfirm').addEventListener('click', () => {
+        const newTitle = document.getElementById('renameNoteInput').value.trim();
+        if (!newTitle) return;
+        const formData = new FormData();
+        formData.append('title', newTitle);
+        formData.append('csrf_token', csrfToken);
+        fetch(`/notes/${noteId}/rename`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) location.reload();
+            else alert('Error: ' + data.message);
+        });
+    });
+
+    // --- Delete note ---
+    document.getElementById('deleteNoteBtn').addEventListener('click', (e) => {
+        e.preventDefault();
+        if (!confirm(`Delete note "${document.getElementById('noteTitleDisplay').textContent}"? This cannot be undone.`)) return;
+        const formData = new FormData();
+        formData.append('csrf_token', csrfToken);
+        fetch(`/notes/${noteId}/delete`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = '{{ url_for("notes.view") }}';
+            } else {
+                alert('Error: ' + data.message);
+            }
+        });
+    });
+</script>
+{% endblock %}

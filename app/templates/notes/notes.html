@@ -4,115 +4,138 @@
 
 {% block extra_css %}
 <style>
-.notes-layout {
-    display: flex;
-    gap: 16px;
-    align-items: flex-start;
+.notes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+    margin-bottom: 1.25rem;
 }
-.notes-sidebar {
-    width: 230px;
-    flex-shrink: 0;
+.note-card {
     border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    overflow: hidden;
-}
-.notes-sidebar-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 12px;
-    border-bottom: 1px solid #e2e8f0;
-    background: #f8fafc;
-}
-.notes-list {
-    max-height: 65vh;
-    overflow-y: auto;
-}
-.notes-list-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 6px;
-    padding: 10px 12px;
-    border-bottom: 1px solid #f1f5f9;
+    border-radius: 12px;
+    padding: 16px;
+    background: #fff;
     cursor: pointer;
-    font-size: 0.88rem;
+    transition: background-color 0.15s, border-color 0.15s;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 130px;
 }
-.notes-list-item:last-child { border-bottom: none; }
-.notes-list-item:hover { background: #f8fafc; }
-.notes-list-item.active { background: #eef2ff; }
-.notes-list-item .note-title {
+.note-card:hover {
+    background-color: #f8fafc;
+    border-color: #cbd5e1;
+}
+.note-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.note-card .note-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #1e293b;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     flex: 1;
 }
-.notes-list-item .note-delete-btn {
-    opacity: 0;
-    border: none;
-    background: none;
+.note-card .note-preview {
+    font-size: 0.82rem;
+    color: #64748b;
+    flex: 1;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    margin-bottom: 10px;
+    word-break: break-word;
+}
+.note-card .note-preview.empty {
+    color: #cbd5e1;
+    font-style: italic;
+}
+.note-card .note-dates {
+    font-size: 0.72rem;
     color: #94a3b8;
-    padding: 0 4px;
-    line-height: 1;
+    border-top: 1px solid #f1f5f9;
+    padding-top: 8px;
 }
-.notes-list-item:hover .note-delete-btn { opacity: 1; }
-.notes-list-item .note-delete-btn:hover { color: #ef4444; }
-.notes-list-empty {
-    padding: 16px 12px;
-    font-size: 0.85rem;
+.note-card .note-menu-btn {
+    color: #94a3b8;
+    background: none;
+    border: none;
+    padding: 2px 6px;
+    flex-shrink: 0;
+}
+.note-card .note-menu-btn:hover {
+    color: #0f172a;
+}
+.notes-empty-state {
+    text-align: center;
+    padding: 60px 20px;
     color: #94a3b8;
 }
-.notes-main { flex: 1; min-width: 0; }
-.notes-title-input {
-    border: none;
-    background: none;
-    font-size: 1.1rem;
-    font-weight: 600;
-    padding: 0;
-    width: 100%;
-}
-.notes-title-input:focus { outline: none; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="section-title mb-0">Scratchpad</h5>
-    <div class="d-flex align-items-center gap-2">
-        <span class="notes-status" id="notesStatus">
-            {% if active %}Last saved {{ active[3] or 'never' }}{% endif %}
-        </span>
-        <button type="button" class="btn btn-light btn-sm" id="copyNotesBtn"><i class="bi bi-clipboard"></i> Copy</button>
-    </div>
+    <button type="button" class="btn btn-primary btn-sm" id="newNoteBtn"><i class="bi bi-plus-lg"></i> New note</button>
 </div>
 
-<div class="notes-layout">
-    <div class="notes-sidebar">
-        <div class="notes-sidebar-header">
-            <span class="fw-semibold" style="font-size: 0.85rem;">Notes</span>
-            <button type="button" class="btn btn-light btn-sm" id="newNoteBtn" title="New note"><i class="bi bi-plus-lg"></i></button>
-        </div>
-        <div class="notes-list" id="notesList">
-            {% for note in notes %}
-            <div class="notes-list-item {% if active and note[0] == active[0] %}active{% endif %}" data-id="{{ note[0] }}">
-                <span class="note-title">{{ note[1] }}</span>
-                <button type="button" class="note-delete-btn" title="Delete note"><i class="bi bi-trash"></i></button>
+{% if notes %}
+<div class="notes-grid">
+    {% for note in notes %}
+    <div class="note-card" data-note-id="{{ note.id }}" onclick="if (!event.target.closest('.dropdown')) window.location.href='{{ url_for('notes.view', id=note.id) }}';">
+        <div class="note-card-header">
+            <span class="note-title">{{ note.title }}</span>
+            <div class="dropdown">
+                <button class="note-menu-btn" data-bs-toggle="dropdown"><i class="bi bi-three-dots-vertical"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item rename-note-btn" href="#" data-note-id="{{ note.id }}" data-note-title="{{ note.title }}">Rename</a></li>
+                    <li><a class="dropdown-item text-danger delete-note-btn" href="#" data-note-id="{{ note.id }}" data-note-title="{{ note.title }}">Delete</a></li>
+                </ul>
             </div>
-            {% else %}
-            <div class="notes-list-empty" id="notesListEmpty">No notes yet. Click + to add one.</div>
-            {% endfor %}
+        </div>
+        {% if note.preview %}
+        <div class="note-preview">{{ note.preview }}</div>
+        {% else %}
+        <div class="note-preview empty">Empty note</div>
+        {% endif %}
+        <div class="note-dates">
+            Created {{ note.created_at }}{% if note.updated_at and note.updated_at != note.created_at %} &middot; Updated {{ note.updated_at }}{% endif %}
         </div>
     </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="notes-empty-state">
+    <i class="bi bi-journal-text" style="font-size: 2rem;"></i>
+    <p class="mt-2 mb-0">No notes yet. Create one to get started.</p>
+</div>
+{% endif %}
 
-    <div class="notes-main">
-        {% if active %}
-        <input type="text" class="notes-title-input mb-2" id="noteTitleInput" value="{{ active[1] }}" maxlength="100" placeholder="Untitled">
-        <textarea class="notes-textarea" id="notesArea" placeholder="Write anything here — it autosaves and isn't tied to any file.">{{ active[2] }}</textarea>
-        {% else %}
-        <div class="text-muted" id="notesEmptyState">No note selected. Create one to get started.</div>
-        <textarea class="notes-textarea d-none" id="notesArea"></textarea>
-        <input type="hidden" id="noteTitleInput" value="">
-        {% endif %}
+<!-- Rename note modal -->
+<div class="modal fade" id="renameNoteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Rename note</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label">New name</label>
+                <input type="text" class="form-control" id="renameNoteInput" maxlength="100" required>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="renameNoteConfirm">Save</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -120,202 +143,75 @@
 
 {% block extra_js %}
 <script>
-(function () {
     const csrfToken = '{{ csrf_token() }}';
-    const notesList = document.getElementById('notesList');
-    const textarea = document.getElementById('notesArea');
-    const titleInput = document.getElementById('noteTitleInput');
-    const status = document.getElementById('notesStatus');
-    const newNoteBtn = document.getElementById('newNoteBtn');
 
-    let activeId = {{ active[0] if active else 'null' }};
-    let saveTimeout = null;
-    let titleSaveTimeout = null;
-
-    function urlFor(path) {
-        return path;
-    }
-
-    function csrfHeaders(extra) {
-        return Object.assign({ 'X-CSRFToken': csrfToken }, extra || {});
-    }
-
-    function setActiveInList(id) {
-        document.querySelectorAll('.notes-list-item').forEach(el => {
-            el.classList.toggle('active', parseInt(el.dataset.id, 10) === id);
-        });
-    }
-
-    function saveContent() {
-        if (activeId === null) return;
+    document.getElementById('newNoteBtn').addEventListener('click', () => {
         const formData = new FormData();
-        formData.append('content', textarea.value);
         formData.append('csrf_token', csrfToken);
-
-        status.textContent = 'Saving...';
-        fetch(`/notes/${activeId}/save`, {
+        fetch('{{ url_for("notes.new") }}', {
             method: 'POST',
-            headers: csrfHeaders(),
-            body: formData
-        })
-        .then(r => r.json())
-        .then(data => {
-            status.textContent = data.success ? `Last saved ${data.saved_at}` : 'Failed to save';
-        })
-        .catch(() => { status.textContent = 'Failed to save (offline?)'; });
-    }
-
-    function saveTitle() {
-        if (activeId === null) return;
-        const formData = new FormData();
-        formData.append('title', titleInput.value);
-        formData.append('csrf_token', csrfToken);
-
-        fetch(`/notes/${activeId}/rename`, {
-            method: 'POST',
-            headers: csrfHeaders(),
+            headers: { 'X-CSRFToken': csrfToken },
             body: formData
         })
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                const listItem = notesList.querySelector(`.notes-list-item[data-id="${activeId}"] .note-title`);
-                if (listItem) listItem.textContent = data.title;
-                if (titleInput.value !== data.title) titleInput.value = data.title;
+                window.location.href = `{{ url_for('notes.view') }}?id=${data.note.id}`;
+            } else {
+                alert('Error: ' + data.message);
             }
         });
-    }
+    });
 
-    function loadNote(id) {
-        fetch(`/notes/${id}`)
-            .then(r => r.json())
-            .then(data => {
-                if (!data.success) return;
-                activeId = data.note.id;
-                titleInput.value = data.note.title;
-                textarea.value = data.note.content;
-                textarea.classList.remove('d-none');
-                titleInput.removeAttribute('type');
-                titleInput.classList.add('notes-title-input');
-                status.textContent = data.note.updated_at ? `Last saved ${data.note.updated_at}` : '';
-                setActiveInList(activeId);
-                const emptyState = document.getElementById('notesEmptyState');
-                if (emptyState) emptyState.remove();
-            });
-    }
-
-    function addNoteToList(note) {
-        const emptyEl = document.getElementById('notesListEmpty');
-        if (emptyEl) emptyEl.remove();
-
-        const item = document.createElement('div');
-        item.className = 'notes-list-item';
-        item.dataset.id = note.id;
-        item.innerHTML = `<span class="note-title">${note.title}</span><button type="button" class="note-delete-btn" title="Delete note"><i class="bi bi-trash"></i></button>`;
-        notesList.appendChild(item);
-        attachItemHandlers(item);
-    }
-
-    function attachItemHandlers(item) {
-        item.addEventListener('click', (e) => {
-            if (e.target.closest('.note-delete-btn')) return;
-            const id = parseInt(item.dataset.id, 10);
-            if (id !== activeId) loadNote(id);
+    // --- Rename note ---
+    let renameNoteId = null;
+    const renameNoteModal = new bootstrap.Modal(document.getElementById('renameNoteModal'));
+    document.querySelectorAll('.rename-note-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            renameNoteId = btn.dataset.noteId;
+            document.getElementById('renameNoteInput').value = btn.dataset.noteTitle;
+            renameNoteModal.show();
         });
-        item.querySelector('.note-delete-btn').addEventListener('click', (e) => {
-            e.stopPropagation();
-            const id = parseInt(item.dataset.id, 10);
-            const title = item.querySelector('.note-title').textContent;
-            if (!confirm(`Delete note "${title}"? This cannot be undone.`)) return;
-
-            const formData = new FormData();
-            formData.append('csrf_token', csrfToken);
-            fetch(`/notes/${id}/delete`, {
-                method: 'POST',
-                headers: csrfHeaders(),
-                body: formData
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (!data.success) return;
-                item.remove();
-                if (id === activeId) {
-                    if (data.next_note) {
-                        loadNote(data.next_note.id);
-                    } else {
-                        activeId = null;
-                        titleInput.value = '';
-                        textarea.value = '';
-                        textarea.classList.add('d-none');
-                        status.textContent = '';
-                        const main = document.querySelector('.notes-main');
-                        if (main && !document.getElementById('notesEmptyState')) {
-                            const div = document.createElement('div');
-                            div.className = 'text-muted';
-                            div.id = 'notesEmptyState';
-                            div.textContent = 'No note selected. Create one to get started.';
-                            main.insertBefore(div, main.firstChild);
-                        }
-                        if (!notesList.querySelector('.notes-list-item')) {
-                            notesList.innerHTML = '<div class="notes-list-empty" id="notesListEmpty">No notes yet. Click + to add one.</div>';
-                        }
-                    }
-                }
-            });
-        });
-    }
-
-    document.querySelectorAll('.notes-list-item').forEach(attachItemHandlers);
-
-    newNoteBtn.addEventListener('click', () => {
+    });
+    document.getElementById('renameNoteConfirm').addEventListener('click', () => {
+        const newTitle = document.getElementById('renameNoteInput').value.trim();
+        if (!newTitle) return;
         const formData = new FormData();
+        formData.append('title', newTitle);
         formData.append('csrf_token', csrfToken);
-        fetch('/notes/new', {
+        fetch(`/notes/${renameNoteId}/rename`, {
             method: 'POST',
-            headers: csrfHeaders(),
+            headers: { 'X-CSRFToken': csrfToken },
             body: formData
         })
         .then(r => r.json())
         .then(data => {
-            if (!data.success) return;
-            addNoteToList(data.note);
-            loadNote(data.note.id);
+            if (data.success) location.reload();
+            else alert('Error: ' + data.message);
         });
     });
 
-    if (textarea) {
-        textarea.addEventListener('input', () => {
-            clearTimeout(saveTimeout);
-            status.textContent = 'Typing...';
-            saveTimeout = setTimeout(saveContent, 800);
-        });
-
-        window.addEventListener('beforeunload', () => {
-            if (saveTimeout) { clearTimeout(saveTimeout); saveContent(); }
-        });
-    }
-
-    if (titleInput) {
-        titleInput.addEventListener('input', () => {
-            clearTimeout(titleSaveTimeout);
-            titleSaveTimeout = setTimeout(saveTitle, 600);
-        });
-        titleInput.addEventListener('blur', () => {
-            clearTimeout(titleSaveTimeout);
-            saveTitle();
-        });
-    }
-
-    const copyBtn = document.getElementById('copyNotesBtn');
-    if (copyBtn) {
-        copyBtn.addEventListener('click', () => {
-            navigator.clipboard.writeText(textarea.value).then(() => {
-                const original = copyBtn.innerHTML;
-                copyBtn.innerHTML = '<i class="bi bi-check2"></i> Copied';
-                setTimeout(() => { copyBtn.innerHTML = original; }, 1500);
+    // --- Delete note ---
+    document.querySelectorAll('.delete-note-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const noteId = btn.dataset.noteId;
+            const noteTitle = btn.dataset.noteTitle;
+            if (!confirm(`Delete note "${noteTitle}"? This cannot be undone.`)) return;
+            const formData = new FormData();
+            formData.append('csrf_token', csrfToken);
+            fetch(`/notes/${noteId}/delete`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                body: formData
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) location.reload();
+                else alert('Error: ' + data.message);
             });
         });
-    }
-})();
+    });
 </script>
 {% endblock %}
