@@ -228,10 +228,15 @@
 
 <!-- Preview modal -->
 <div class="modal fade" id="previewModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-lg modal-dialog-centered" id="previewModalDialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="previewModalTitle">Preview</h5>
+                <h5 class="modal-title" id="previewModalTitle">
+                    <span class="preview-filename-base"></span><span class="preview-filename-extension"></span>
+                </h5>
+                <button type="button" class="btn btn-outline-secondary btn-sm preview-fullscreen-btn" id="previewFullscreenBtn" title="Full screen">
+                    <i class="bi bi-arrows-fullscreen"></i>
+                </button>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="previewModalBody">
@@ -288,6 +293,12 @@
     const UPLOAD_CONCURRENCY = 3; // upload up to N files at once
     let reloadNeeded = false;
 
+    function escapeHtml(value) {
+        const element = document.createElement('div');
+        element.textContent = value;
+        return element.innerHTML;
+    }
+
     function startUploads(fileList) {
         const files = Array.from(fileList);
         let index = 0;
@@ -315,9 +326,10 @@
     function uploadOneFile(file, onDone) {
         const item = document.createElement('div');
         item.className = 'upload-progress-item';
+        const safeFilename = escapeHtml(file.name);
         item.innerHTML = `
             <div class="upload-progress-header">
-                <span class="upload-progress-name" title="${file.name}">${file.name}</span>
+                <span class="upload-progress-name" title="${safeFilename}">${safeFilename}</span>
                 <span class="upload-progress-pct">0%</span>
             </div>
             <div class="upload-progress-bar"><div class="upload-progress-fill"></div></div>
@@ -548,17 +560,44 @@
 
     // --- Preview ---
     const previewModal = new bootstrap.Modal(document.getElementById('previewModal'));
+    const previewModalEl = document.getElementById('previewModal');
+    const previewModalDialog = document.getElementById('previewModalDialog');
+    const previewFullscreenBtn = document.getElementById('previewFullscreenBtn');
     const IMAGE_EXT = ['png','jpg','jpeg','gif','webp','svg','bmp','ico'];
     const PDF_EXT = ['pdf'];
 
+    function setPreviewFullscreen(on) {
+        previewModalDialog.classList.toggle('modal-fullscreen', on);
+        previewFullscreenBtn.innerHTML = on
+            ? '<i class="bi bi-fullscreen-exit"></i>'
+            : '<i class="bi bi-arrows-fullscreen"></i>';
+        previewFullscreenBtn.title = on ? 'Minimize' : 'Full screen';
+    }
+
+    previewFullscreenBtn.addEventListener('click', () => {
+        setPreviewFullscreen(!previewModalDialog.classList.contains('modal-fullscreen'));
+    });
+
+    // Always start each new preview in the normal (non-fullscreen) size
+    previewModalEl.addEventListener('hidden.bs.modal', () => setPreviewFullscreen(false));
+
     function openPreview(fileId, filename, extension) {
-        document.getElementById('previewModalTitle').textContent = filename;
+        setPreviewFullscreen(false);
+        const title = document.getElementById('previewModalTitle');
+        const extensionIndex = filename.lastIndexOf('.');
+        title.querySelector('.preview-filename-base').textContent = extensionIndex > 0
+            ? filename.slice(0, extensionIndex)
+            : filename;
+        title.querySelector('.preview-filename-extension').textContent = extensionIndex > 0
+            ? filename.slice(extensionIndex)
+            : '';
+        title.title = filename;
         const body = document.getElementById('previewModalBody');
         body.innerHTML = '<div class="text-center text-muted py-4">Loading preview...</div>';
         previewModal.show();
 
         if (IMAGE_EXT.includes(extension)) {
-            body.innerHTML = `<img src="/preview/${fileId}" alt="${filename}">`;
+            body.innerHTML = `<img src="/preview/${fileId}" alt="${escapeHtml(filename)}">`;
         } else if (PDF_EXT.includes(extension)) {
             body.innerHTML = `<iframe src="/preview/${fileId}"></iframe>`;
         } else {

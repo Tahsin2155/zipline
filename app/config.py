@@ -1,10 +1,18 @@
 import os
+from datetime import timedelta
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class Config:
     SECRET_KEY = os.environ.get('FLASK_SECRET_KEY', 'dev-only-change-this-in-production')
+
+    # Logged-in sessions expire after 30 minutes of inactivity. Session is
+    # marked permanent at login (see auth/routes.py) so this applies; each
+    # request that touches the session resets the 30-minute countdown
+    # (SESSION_REFRESH_EACH_REQUEST defaults to True), so it's an idle
+    # timeout, not a hard cutoff from login time.
+    PERMANENT_SESSION_LIFETIME = timedelta(minutes=30)
 
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
     DATABASE_FOLDER = os.path.join(BASE_DIR, 'databases')

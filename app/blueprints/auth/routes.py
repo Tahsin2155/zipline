@@ -28,6 +28,7 @@ def login():
         if record is not None and verify_password(username, password):
             record_login_result(username, success=True)
             session.clear()
+            session.permanent = True
             session['username'] = username
             flash(f'Welcome back, {username}!', 'success')
             return redirect(url_for('files.dashboard'))
