@@ -1,111 +1,119 @@
 # Zipline
 
-A personal, self-hosted file transfer app: login, per-user storage, nested
-folders, search, inline previews (images / PDFs / text-code), and a
-free-text scratchpad. Built with Flask + SQLite, no external services.
+A personal, self-hosted file transfer and mini-drive app: log in, get
+per-user storage with nested folders, instant filename search, inline
+previews for images/PDFs/text-code, and a free-text scratchpad for notes.
+Built with Flask + SQLite — no external services, no third-party accounts,
+no database server to run.
 
-## What changed from the original single-file version
+Zipline is meant to be **self-hosted**: clone it, run it on your own
+machine or your own server, and it's yours. There's no hosted version and
+no accounts system beyond the users you create yourself.
 
-- **Blueprints**: split into `auth`, `files`, `notes` instead of one `app.py`.
-- **Real nested folders**: create/rename/delete, breadcrumbs, move files between folders.
-- **Search**: instant filename search across all folders.
-- **Previews**: images and PDFs render inline, text/code files show in a
-  modal (truncated with a download link if the file is large).
-- **Scratchpad**: a `/notes` page — one big autosaving textarea per user,
-  not tied to any file, with a copy button.
-- **Security hardening**: login lockout after repeated failures, a
-  blocklist of dangerous file extensions, per-user storage quota, legacy
-  plaintext passwords in `users.json` auto-migrate to hashes on first login.
-- **PythonAnywhere-ready**: no in-process background thread for cleanup
-  (PythonAnywhere doesn't support that in web apps — see below). Cleanup is
-  now a standalone script meant for PythonAnywhere's Scheduled Tasks.
+## Features
 
-## Local setup
+- **Per-user storage** — every user gets their own SQLite database and
+  upload folder; users can't see each other's files.
+- **Real nested folders** — create, rename, delete, breadcrumb navigation,
+  and move files between folders.
+- **Search** — instant filename search across all of a user's folders.
+- **Inline previews** — images and PDFs render in the browser; text/code
+  files open in a modal (large files are truncated with a download link).
+- **Scratchpad** — a `/notes` page for free-text notes, autosaving, not
+  tied to any uploaded file.
+- **Security basics built in** — hashed passwords, login lockout after
+  repeated failed attempts, CSRF protection on all mutating requests, a
+  blocklist of dangerous file extensions, and a per-user storage quota.
+- **Automatic retention cleanup** — files older than a configurable number
+  of days are purged by a standalone script you schedule yourself (see
+  [`guide.md`](guide.md)) — there's no always-on background thread, so it
+  works even on hosts that don't support one.
+
+## Quick start
 
 ```bash
+git clone https://github.com/Tahsin2155/zipline.git
+cd zipline
 pip install -r requirements.txt
-python manage_users.py yourname            # prompts for a password
-FLASK_ENV=development python wsgi.py       # http://127.0.0.1:5000
+python manage_users.py yourname        # creates your first login, prompts for a password
+FLASK_ENV=development python wsgi.py   # http://127.0.0.1:5000
 ```
 
 `FLASK_ENV=development` relaxes the secure-cookie flag so login works over
-plain HTTP locally. Don't set it in production.
-
-## Deploying on PythonAnywhere
-
-1. Upload/clone this project to somewhere like `/home/<you>/zipline`.
-2. In a Bash console: `pip install --user -r requirements.txt`.
-3. Create at least one user: `python manage_users.py yourname`.
-4. On the **Web** tab, create a new web app (manual config, any Python version 3.10+).
-5. Set the **source code** directory to `/home/<you>/zipline`.
-6. Edit the auto-generated WSGI file (linked from the Web tab) so it ends with:
-   ```python
-   import sys
-  path = '/home/<you>/zipline'
-   if path not in sys.path:
-       sys.path.insert(0, path)
-
-   from wsgi import application
-   ```
-7. Set `FLASK_SECRET_KEY` as an environment variable on the Web tab (or edit
-   `app/config.py` directly) — don't leave the default in production.
-8. Reload the web app.
-
-### Cleanup (expired file retention)
-
-PythonAnywhere web apps run under uWSGI **without thread support**, so an
-always-running "loop forever and sleep" cleanup thread inside the Flask app
-won't work reliably there — this is a platform limitation, not a bug in this
-app. Instead, use PythonAnywhere's **Tasks** tab:
-
-1. Go to the **Tasks** tab.
-2. Add a scheduled task (daily, e.g. 03:00) running:
-   ```
-  python3.x /home/<you>/zipline/cleanup_task.py
-   ```
-3. That script runs once, deletes files older than `FILE_RETENTION_DAYS`
-   (default 5, override with `--retention-days N`), and exits.
-
-## Managing users
-
-```bash
-python manage_users.py alice                     # prompts for password
-python manage_users.py alice --password foo123    # set directly
-python manage_users.py alice --force               # overwrite existing user
-python manage_users.py alice --remove              # delete a user
-```
+plain HTTP on localhost. Don't set it once you're running for real, over
+HTTPS — see [`guide.md`](guide.md) for why, and for everything else
+involved in running this somewhere other than your own laptop
+(environment variables, HTTPS, the cleanup task, backups, and
+troubleshooting).
 
 ## Project layout
 
 ```
-app/
-  __init__.py          # app factory
-  config.py            # all settings in one place
-  db.py                # per-user SQLite connection + schema
-  users.py             # users.json loading, password verify, lockout
-  csrf.py              # CSRF protection
-  decorators.py         # login_required
-  blueprints/
-    auth/              # login/logout
-    files/             # dashboard, folders, upload, download, preview, delete
-    notes/             # scratchpad
-  templates/
-  static/css/main.css
-cleanup_task.py         # run via PythonAnywhere Scheduled Task, not a thread
-manage_users.py         # CLI user management
-wsgi.py                 # entrypoint for PythonAnywhere / any WSGI server
-users.json               # {username: {password, failed_logins, locked_until}}
-databases/                # one SQLite file per user (auto-created)
-uploads/                  # one subfolder per user (auto-created)
+zipline/
+├── app
+│   ├── blueprints
+│   │   ├── auth/           # login / logout
+│   │   ├── files/          # dashboard, folders, upload, download, preview, delete
+│   │   └── notes/          # scratchpad
+│   │
+│   ├── static
+│   │   ├── css
+│   │   │   └── main.css    # app styling
+│   │   └── .../
+│   │
+│   ├── templates/          # Jinja templates
+│   ├── __init__.py         # application factory: config, security headers, blueprints, error pages
+│   ├── config.py           # every tunable setting in one place (documented inline)
+│   ├── csrf.py             # CSRF token generation + request-level enforcement
+│   ├── db.py               # per-user SQLite connection + schema management
+│   ├── decorators.py       # @login_required
+│   └── users.py            # users.json loading, password verification, login lockout
+│
+├── cleanup_task.py         # one-shot retention cleanup, run on a schedule (documented inline)
+├── manage_users.py         # CLI for adding/updating/removing users (documented inline)
+├── wsgi.py                 # WSGI entrypoint for any WSGI server, and local dev runner (documented inline)
+├── requirements.txt        # dependencies
+│
+├── databases/              # one SQLite file per user — auto-created
+├── uploads/                # one subfolder per user — auto-created
+├── users.json              # {username: {password, failed_logins, locked_until}} — auto-created
+│
+├── guide.md                # the full self-hosting guide
+└── README.md               # README
 ```
 
-## Notes on limits
 
-- `MAX_FILE_SIZE` / `USER_STORAGE_QUOTA` in `app/config.py` — tune the quota
-  to whatever your PythonAnywhere plan's disk allowance actually is.
-- `BLOCKED_EXTENSIONS` is a blocklist (not an allowlist) since the app is
-  meant to move "any" file type around for personal use — add to it if you
-  want to be stricter.
-- This app has no built-in HTTPS; PythonAnywhere terminates TLS for you, so
-  `SESSION_COOKIE_SECURE=True` (the default outside `FLASK_ENV=development`)
-  is correct there.
+## Documentation
+
+- **[`guide.md`](guide.md)** — the full self-hosting guide: local setup,
+  environment variables, deploying behind your own web server or on a
+  platform like PythonAnywhere, scheduling the cleanup task, backups, and
+  troubleshooting. Start here if you're setting this up for yourself.
+- `app/config.py`, `wsgi.py`, `manage_users.py`, and `cleanup_task.py` are
+  all commented in place — read them directly if you want to know exactly
+  what a setting or script does.
+
+## Why self-hosted, and what that means for you
+
+The code here is public so that anyone can run their own private copy —
+it is **not** a multi-tenant service you sign up for. Each install:
+
+- Stores everything on the disk of whatever machine runs it (SQLite files
+  under `databases/`, uploaded files under `uploads/`).
+- Has its own independent `users.json` — accounts are not shared between
+  installs.
+- Is only as secure as the box it runs on and the network path to it. See
+  [`guide.md`](guide.md) for the HTTPS and secret-key guidance before you
+  expose an instance to the internet.
+
+## License
+
+No license file is currently included in this repository. Under default
+copyright law, that means no rights are granted to use, modify, or
+redistribute this code — viewing and forking on GitHub doesn't imply
+permission beyond that.
+ 
+The intent is for this project to be usable for **personal use only**
+(no commercial use), with the name **Zipline** kept as-is in any copy or
+fork. That intent isn't yet formalized as an actual license — until a
+LICENSE file is added, don't rely on this note as a substitute for one.

@@ -62,7 +62,7 @@ body {
     transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 .app-icon-header {
-    padding: 1px;
+    padding: 2px;
     border-radius: 11px;
 }
 .navbar-brand:hover .app-icon-header {

@@ -11,8 +11,8 @@ from app.users import get_user_record, is_locked_out, record_login_result, verif
 def login():
     """User login page."""
     if request.method == 'POST':
-        username = request.form.get('username', '').strip()
-        password = request.form.get('password', '').strip()
+        username = request.form.get('username', '').lower().strip()
+        password = request.form.get('password', '')
 
         if not username or not password:
             flash('Username and password are required.', 'danger')
