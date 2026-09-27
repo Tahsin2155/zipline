@@ -7,7 +7,6 @@ Usage:
     python manage_users.py <username> --force           # overwrite existing user
 """
 import argparse
-import getpass
 import json
 from pathlib import Path
 from typing import Optional
@@ -37,8 +36,8 @@ def save_users(users: dict) -> None:
 
 
 def prompt_password() -> str:
-    password = getpass.getpass('Password: ')
-    confirm = getpass.getpass('Confirm password: ')
+    password = input('Password: ')
+    confirm = input('Confirm password: ')
     if password != confirm:
         raise SystemExit('Passwords do not match.')
     if not password:
