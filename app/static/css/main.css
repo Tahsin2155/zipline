@@ -418,6 +418,72 @@ hr {
     font-size: 0.9em;
 }
 
+.delete-action {
+    position: relative;
+    display: inline-block;
+    margin-left: 0.35rem;
+}
+
+.delete-action .delete-file-btn {
+    margin-left: 0;
+}
+
+.delete-confirmation {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.5rem);
+    z-index: 10;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 230px;
+    padding: 0.6rem;
+    background: var(--surface);
+    border: 1px solid rgba(185, 190, 201, 0.6);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-raised-sm);
+}
+
+.delete-confirmation-text {
+    flex-basis: 100%;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.delete-confirmation[hidden] {
+    display: none;
+}
+
+.delete-folder-action {
+    position: relative;
+}
+
+.delete-folder-action .delete-confirmation {
+    right: 0;
+    top: calc(100% + 0.5rem);
+    z-index: 1050;
+}
+
+@media (max-width: 576px) {
+    .delete-confirmation {
+        position: fixed;
+        right: 1rem;
+        bottom: 1rem;
+        top: auto;
+        left: 1rem;
+        min-width: 0;
+    }
+
+    .delete-folder-action .delete-confirmation {
+        top: auto;
+        right: 1rem;
+        bottom: 1rem;
+        left: 1rem;
+    }
+}
+
 /* Upload progress */
 .upload-progress-item {
     border: none;

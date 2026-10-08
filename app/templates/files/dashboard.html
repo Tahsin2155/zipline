@@ -82,13 +82,57 @@
     <div class="folder-card" data-folder-id="{{ folder.id }}" onclick="if (!event.target.closest('.dropdown')) window.location.href='{{ url_for('files.dashboard', folder=folder.id) }}';" style="cursor: pointer;">
         <i class="bi bi-folder-fill"></i>
         <span class="folder-name">{{ folder.name }}</span>
-        <div class="dropdown">
-            <button class="folder-menu-btn" data-bs-toggle="dropdown"><i class="bi bi-three-dots-vertical"></i></button>
+        <div class="dropdown delete-folder-action">
+            <button class="folder-menu-btn" data-bs-toggle="dropdown">
+                <i class="bi bi-three-dots-vertical"></i>
+            </button>
+
             <ul class="dropdown-menu dropdown-menu-end">
-                <li><a class="dropdown-item rename-folder-btn" href="#" data-folder-id="{{ folder.id }}" data-folder-name="{{ folder.name }}">Rename</a></li>
-                <li><a class="dropdown-item move-folder-btn" href="#" data-folder-id="{{ folder.id }}" data-folder-name="{{ folder.name }}">Move to...</a></li>
-                <li><a class="dropdown-item text-danger delete-folder-btn" href="#" data-folder-id="{{ folder.id }}" data-folder-name="{{ folder.name }}">Delete</a></li>
+                <li>
+                    <a class="dropdown-item rename-folder-btn"
+                       href="#"
+                       data-folder-id="{{ folder.id }}"
+                       data-folder-name="{{ folder.name }}">
+                        Rename
+                    </a>
+                </li>
+
+                <li>
+                    <a class="dropdown-item move-folder-btn"
+                       href="#"
+                       data-folder-id="{{ folder.id }}"
+                       data-folder-name="{{ folder.name }}">
+                        Move to...
+                    </a>
+                </li>
+
+                <li>
+                    <a class="dropdown-item text-danger delete-folder-btn"
+                       href="#"
+                       data-folder-id="{{ folder.id }}"
+                       data-folder-name="{{ folder.name }}"
+                       aria-expanded="false">
+                        Delete
+                    </a>
+                </li>
             </ul>
+
+            <div class="delete-confirmation"
+                role="dialog"
+                aria-label="Confirm deletion of folder {{ folder.name }}"
+                hidden>
+                <span class="delete-confirmation-text">Delete folder "{{ folder.name }}" and everything inside it? This cannot be undone.</span>
+
+                <button type="button"
+                        class="btn btn-danger btn-sm confirm-folder-delete-btn">
+                    Delete
+                </button>
+
+                <button type="button"
+                        class="btn btn-light btn-sm cancel-folder-delete-btn">
+                    Cancel
+                </button>
+            </div>
         </div>
     </div>
     {% endfor %}
@@ -137,9 +181,33 @@
                         <button type="button" class="btn btn-light move-file-btn" data-file-id="{{ file.id }}" data-file-name="{{ file.filename }}" title="Move to...">
                             <i class="bi bi-folder-symlink"></i>
                         </button>
-                        <button type="button" class="btn btn-danger delete-file-btn" data-file-id="{{ file.id }}" data-file-name="{{ file.filename }}" title="Delete">
-                            <i class="bi bi-trash3"></i>
-                        </button>
+                        <div class="delete-action">
+                            <button type="button"
+                                    class="btn btn-danger delete-file-btn"
+                                    data-file-id="{{ file.id }}"
+                                    data-file-name="{{ file.filename }}"
+                                    title="Delete"
+                                    aria-expanded="false">
+                                <i class="bi bi-trash3"></i>
+                            </button>
+
+                            <div class="delete-confirmation"
+                                 role="dialog"
+                                 aria-label="Confirm deletion of file {{ file.filename }}"
+                                 hidden>
+                                <span class="delete-confirmation-text">Delete "{{ file.filename }}"? This cannot be undone.</span>
+
+                                <button type="button"
+                                        class="btn btn-danger btn-sm confirm-delete-btn">
+                                    Delete
+                                </button>
+
+                                <button type="button"
+                                        class="btn btn-light btn-sm cancel-delete-btn">
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 {% endfor %}
@@ -392,38 +460,189 @@
     }
 
     // --- Delete file ---
-    function deleteFile(fileId, filename) {
-        if (!confirm(`Are you sure you want to delete "${filename}"?`)) return;
-        fetch(`/delete/${fileId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) location.reload();
-            else alert('Error: ' + data.message);
+    function closeDeleteConfirmations() {
+        document.querySelectorAll('.delete-action, .delete-folder-action').forEach(action => {
+            const button = action.querySelector('.delete-file-btn, .delete-folder-btn');
+            const confirmation = action.querySelector('.delete-confirmation');
+
+            if (!button || !confirmation || confirmation.dataset.pending === 'true') {
+                return;
+            }
+
+            confirmation.hidden = true;
+            button.setAttribute('aria-expanded', 'false');
         });
     }
-    document.querySelectorAll('.delete-file-btn').forEach(btn => {
-        btn.addEventListener('click', () => deleteFile(btn.dataset.fileId, btn.dataset.fileName));
+
+    function deleteFile(fileId, action) {
+        const deleteButton = action.querySelector('.delete-file-btn, .delete-folder-btn');
+        const confirmButton = action.querySelector('.confirm-delete-btn');
+        const cancelButton = action.querySelector('.cancel-delete-btn');
+        const confirmation = action.querySelector('.delete-confirmation');
+
+        confirmation.dataset.pending = 'true';
+        confirmButton.disabled = true;
+        cancelButton.disabled = true;
+        deleteButton.disabled = true;
+        confirmButton.textContent = 'Deleting...';
+
+        fetch(`/delete/${fileId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                confirmation.dataset.pending = 'false';
+                confirmButton.disabled = false;
+                cancelButton.disabled = false;
+                deleteButton.disabled = false;
+                confirmButton.textContent = 'Delete';
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => {
+            confirmation.dataset.pending = 'false';
+            confirmButton.disabled = false;
+            cancelButton.disabled = false;
+            deleteButton.disabled = false;
+            confirmButton.textContent = 'Delete';
+            alert(`Error: Unable to delete the file. ${error.message}`);
+        });
+    }
+
+    document.querySelectorAll('.delete-action').forEach(action => {
+        const deleteButton = action.querySelector('.delete-file-btn');
+        const confirmButton = action.querySelector('.confirm-delete-btn');
+        const cancelButton = action.querySelector('.cancel-delete-btn');
+        const confirmation = action.querySelector('.delete-confirmation');
+
+        if (!deleteButton || !confirmButton || !cancelButton || !confirmation) {
+            return;
+        }
+
+        deleteButton.addEventListener('click', () => {
+            closeDeleteConfirmations();
+
+            confirmation.hidden = false;
+            deleteButton.setAttribute('aria-expanded', 'true');
+            confirmButton.focus();
+        });
+
+        confirmButton.addEventListener('click', () => {
+            deleteFile(
+                deleteButton.dataset.fileId,
+                action
+            );
+        });
+
+        cancelButton.addEventListener('click', () => {
+            confirmation.hidden = true;
+            deleteButton.setAttribute('aria-expanded', 'false');
+            deleteButton.focus();
+        });
+    });
+
+    document.addEventListener('click', event => {
+        if (!event.target.closest('.delete-confirmation, .delete-file-btn, .delete-folder-btn')) {
+            closeDeleteConfirmations();
+        }
+    });
+
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+            closeDeleteConfirmations();
+        }
     });
 
     // --- Delete folder ---
-    document.querySelectorAll('.delete-folder-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+    document.querySelectorAll('.delete-folder-action').forEach(action => {
+        const toggleButton = action.querySelector('[data-bs-toggle="dropdown"]');
+        const deleteButton = action.querySelector('.delete-folder-btn');
+        const confirmButton = action.querySelector('.confirm-folder-delete-btn');
+        const cancelButton = action.querySelector('.cancel-folder-delete-btn');
+        const confirmation = action.querySelector('.delete-confirmation');
+
+        if (!toggleButton || !deleteButton || !confirmButton || !cancelButton || !confirmation) {
+            return;
+        }
+
+        deleteButton.addEventListener('click', (e) => {
             e.preventDefault();
-            const folderId = btn.dataset.folderId;
-            const folderName = btn.dataset.folderName;
-            if (!confirm(`Delete folder "${folderName}" and everything inside it? This cannot be undone.`)) return;
+
+            if (deleteButton.getAttribute('aria-disabled') === 'true') {
+                return;
+            }
+
+            closeDeleteConfirmations();
+
+            confirmation.hidden = false;
+            deleteButton.setAttribute('aria-expanded', 'true');
+            confirmButton.focus();
+        });
+
+        confirmButton.addEventListener('click', () => {
+            if (confirmButton.disabled) {
+                return;
+            }
+
+            const folderId = deleteButton.dataset.folderId;
+
+            confirmation.dataset.pending = 'true';
+            confirmButton.disabled = true;
+            cancelButton.disabled = true;
+            deleteButton.setAttribute('aria-disabled', 'true');
+            confirmButton.textContent = 'Deleting...';
+
             fetch(`/folders/${folderId}/delete`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                }
             })
-            .then(r => r.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
-                if (data.success) window.location.href = data.redirect;
-                else alert('Error: ' + data.message);
+                if (data.success) {
+                    window.location.href = data.redirect;
+                } else {
+                    confirmation.dataset.pending = 'false';
+                    confirmButton.disabled = false;
+                    cancelButton.disabled = false;
+                    deleteButton.setAttribute('aria-disabled', 'false');
+                    confirmButton.textContent = 'Delete';
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                confirmation.dataset.pending = 'false';
+                confirmButton.disabled = false;
+                cancelButton.disabled = false;
+                deleteButton.setAttribute('aria-disabled', 'false');
+                confirmButton.textContent = 'Delete';
+                alert(`Error: Unable to delete the folder. ${error.message}`);
             });
+        });
+
+        cancelButton.addEventListener('click', () => {
+            confirmation.hidden = true;
+            deleteButton.setAttribute('aria-expanded', 'false');
+            toggleButton.focus();
         });
     });
 
