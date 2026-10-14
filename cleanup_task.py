@@ -38,17 +38,53 @@ from pathlib import Path
 from app import create_app
 from app.config import Config
 
+# ============================================================================================================
 
-def _purge_expired_files_in_db(db_path, retention_days, display=True):
+WIDTH = 64
+
+
+def rule(char='-'):
+    print(char * WIDTH)
+
+
+def fit(text, width):
+    return text if len(text) <= width else text[:width - 1] + '…'
+
+
+def kv(label, value):
+    print(f'  {label:<12}{value}')
+
+
+def stat(label, value):
+    print(f'  {label:<24}{str(value):>{WIDTH - 28}}')
+
+
+def db_header(index, total, name):
+    print(f'[{index}/{total}] {name}')
+
+
+def file_line(symbol, name, size, note):
+    size_txt = format_size(size) if size is not None else '-'
+    print(f'  {symbol} {fit(name, 32):<32} {size_txt:>9}  {note}')
+
+# ============================================================================================================
+
+def format_size(num_bytes):
+    for unit in ('B', 'KB', 'MB', 'GB'):
+        if num_bytes < 1024 or unit == 'GB':
+            return f'{num_bytes:.1f} {unit}' if unit != 'B' else f'{num_bytes} B'
+        num_bytes /= 1024
+
+
+def _purge_expired_files_in_db(db_path, retention_days, display=True, dry_run=False):
     """Delete files older than retention_days from disk and from one user's DB.
 
-    Returns counts for deleted, missing, and failed files. Each user has their
-    own SQLite file (see app/db.py), so this is called once per user DB file
-    found.
+    Rows are only removed when the file is gone (deleted now, or already missing). 
+    If the delete fails, the row stays so the next run retries it.
     """
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=30) #wait if the webapp has the DB locked
     conn.execute('PRAGMA foreign_keys = ON')
-    counts = {'deleted': 0, 'missing': 0, 'failed': 0}
+    counts = {'deleted': 0, 'missing': 0, 'failed': 0, 'bytes': 0}
 
     try:
         cursor = conn.cursor()
@@ -62,35 +98,45 @@ def _purge_expired_files_in_db(db_path, retention_days, display=True):
         expired_files = cursor.fetchall()
         if not expired_files:
             if display:
-                print('    No expired files.')
+                print('  · nothing expired')
             return counts
 
         ids_to_delete = []
         for file_id, file_path in expired_files:
             filename = Path(file_path).name if file_path else '<unknown>'
+
             if not file_path or not os.path.exists(file_path):
                 counts['missing'] += 1
+                ids_to_delete.append((file_id,))
                 if display:
                     print(f'    ! {filename} (file already missing)')
-            else:
-                try:
-                    os.remove(file_path)
-                except FileNotFoundError:
-                    counts['missing'] += 1
-                    if display:
-                        print(f'    ! {filename} (file already missing)')
-                except OSError as e:
-                    counts['failed'] += 1
-                    if display:
-                        print(f'    x {filename} (delete failed: {e})')
-                else:
-                    counts['deleted'] += 1
-                    if display:
-                        print(f'    ✓ {filename}')
-            ids_to_delete.append((file_id,))
+                continue
 
-        cursor.executemany('DELETE FROM files WHERE id = ?', ids_to_delete)
-        conn.commit()
+            try:
+                size = os.path.getsize(file_path)
+                if not dry_run:
+                    os.remove(file_path)
+            except FileNotFoundError:
+                counts['missing'] += 1
+                ids_to_delete.append((file_id,))
+                if display:
+                    print(f'    ! {filename} (file already missing)')
+            except OSError as e:
+                # FIX: do NOT add to ids_to_delete -- keep the row, retry next run
+                counts['failed'] += 1
+                if display:
+                    file_line('✗', filename, size, 'failed')
+                    print(f'      ↳ {e}')
+            else:
+                counts['deleted'] += 1
+                counts['bytes'] += size
+                ids_to_delete.append((file_id,))
+                if display:
+                    file_line('✓', filename, size, 'would delete' if dry_run else 'deleted')
+
+        if ids_to_delete and not dry_run:
+            cursor.executemany('DELETE FROM files WHERE id = ?', ids_to_delete)
+            conn.commit()
         return counts
     finally:
         conn.close()
@@ -103,7 +149,8 @@ def purge_expired_files_in_db(db_path, retention_days):
 
 def check_files_in_db(db_path):
     """Report whether every file recorded in one database exists on disk."""
-    conn = sqlite3.connect(db_path)
+
+    conn = sqlite3.connect(db_path, timeout=30)
     conn.execute('PRAGMA foreign_keys = ON')
     counts = {'present': 0, 'missing': 0}
 
@@ -112,17 +159,19 @@ def check_files_in_db(db_path):
         cursor.execute('SELECT file_path FROM files')
         files = cursor.fetchall()
         if not files:
-            print('    No files recorded.')
+            print('  · no files recorded')
             return counts
 
         for (file_path,) in files:
-            filename = Path(file_path).name if file_path else '<unknown>'
             if file_path and os.path.exists(file_path):
                 counts['present'] += 1
-                print(f'    ✓ {filename}')
             else:
                 counts['missing'] += 1
-                print(f'    ! {filename} (file missing)')
+                name = Path(file_path).name if file_path else '<unknown>'
+                file_line('!', name, None, 'file missing')
+
+        if not counts['missing']:
+            print(f"  · all {counts['present']} files present")
         return counts
     finally:
         conn.close()
@@ -133,31 +182,52 @@ def check_files_all_users(database_folder):
     db_files = list(Path(database_folder).glob('*.db'))
     totals = {'present': 0, 'missing': 0}
     for index, db_file in enumerate(db_files, start=1):
-        print(f'[{index}/{len(db_files)}] {db_file.name}')
+        db_header(index, len(db_files), db_file.name)
         counts = check_files_in_db(str(db_file))
         for key in totals:
             totals[key] += counts[key]
-        print(f"    Summary: {counts['present']} present, {counts['missing']} missing")
+        if counts['missing']:
+            print(f"  → {counts['present']} present · {counts['missing']} missing")
         print()
     return totals
 
 
-def purge_expired_files_all_users(database_folder, retention_days):
+
+def purge_expired_files_all_users(database_folder, retention_days, dry_run=False):
     """Run the cleanup across every user's .db file and return all counts."""
+    
     db_files = list(Path(database_folder).glob('*.db'))
-    totals = {'deleted': 0, 'missing': 0, 'failed': 0}
+    totals = {'deleted': 0, 'missing': 0, 'failed': 0, 'bytes': 0, 'db_errors': 0}
+    verb = 'would delete' if dry_run else 'deleted'
+
     for index, db_file in enumerate(db_files, start=1):
-        print(f'[{index}/{len(db_files)}] {db_file.name}')
-        counts = _purge_expired_files_in_db(str(db_file), retention_days)
-        for key in totals:
+        db_header(index, len(db_files), db_file.name)
+        try:
+            counts = _purge_expired_files_in_db(str(db_file), retention_days, dry_run=dry_run)
+        except sqlite3.Error as e:
+            # one bad DB shouldn't stop everyone else's cleanup
+            totals['db_errors'] += 1
+            print(f'  ✗ database error: {e}')
+            print()
+            continue
+
+        for key in counts:
             totals[key] += counts[key]
-        summary = [f"{counts['deleted']} deleted"]
+
+        parts = []
+        if counts['deleted']:
+            parts.append(f"{counts['deleted']} {verb}")
         if counts['missing']:
-            summary.append(f"{counts['missing']} missing")
+            parts.append(f"{counts['missing']} missing")
         if counts['failed']:
-            summary.append(f"{counts['failed']} failed")
-        print(f"    Summary: {', '.join(summary)}")
+            parts.append(f"{counts['failed']} failed")
+        if parts:
+            if counts['bytes']:
+                parts.append(format_size(counts['bytes']))
+            print(f"  → {' · '.join(parts)}")
+        
         print()
+
     return totals
 
 
@@ -171,6 +241,11 @@ def main():
         '--check',
         action='store_true',
         help='report the state of all recorded files without deleting anything',
+    )
+    parser.add_argument(
+        '--dry-run',
+        action = 'store_true',
+        help = 'show what would be deleted (and how much space) without deleting anything',
     )
     args = parser.parse_args()
 
@@ -190,40 +265,61 @@ def main():
     with app.app_context():
         database_folder = Path(app.config['DATABASE_FOLDER'])
         db_count = len(list(database_folder.glob('*.db')))
-        print('=' * 58)
-        print(' ZIPLINE FILE CHECK' if args.check else ' ZIPLINE RETENTION CLEANUP')
-        print('=' * 58)
-        print(f' Retention period : {args.retention_days} days')
-        print(f' Database folder  : {database_folder}')
-        print(f' Started          : {started_at}')
-        print()
-        print(f'Found {db_count} database(s) to scan.')
+
+        if args.check:
+            title, tag = 'ZIPLINE · FILE CHECK', 'READ-ONLY'
+        elif args.dry_run:
+            title, tag = 'ZIPLINE · RETENTION CLEANUP', 'DRY RUN'
+        else:
+            title, tag = 'ZIPLINE · RETENTION CLEANUP', 'LIVE'
+
+        rule('=')
+        print(f'  {title}'.ljust(WIDTH - len(tag) - 2) + tag)
+        rule('=')
+        if not args.check:
+            kv('Retention', f'{args.retention_days} days')
+        kv('Folder', database_folder)
+        kv('Databases', db_count)
+        kv('Started', started_at)
+        rule('=')
         print()
 
         if args.check:
             totals = check_files_all_users(str(database_folder))
         else:
-            totals = purge_expired_files_all_users(str(database_folder), args.retention_days)
+            totals = purge_expired_files_all_users(
+                str(database_folder), args.retention_days, dry_run=args.dry_run
+            )
 
-        print('-' * 58)
-        print(' FILE CHECK SUMMARY' if args.check else ' CLEANUP SUMMARY')
-        print('-' * 58)
-        print(f' Databases scanned : {db_count}')
+        rule('-')
+        print('  SUMMARY')
+        rule('-')
+        stat('Databases scanned', db_count)
         if args.check:
-            print(f" Files present     : {totals['present']}")
-            print(f" Files missing     : {totals['missing']}")
+            stat('Files present', totals['present'])
+            stat('Files missing', totals['missing'])
         else:
-            print(f" Files deleted     : {totals['deleted']}")
-            print(f" Files missing     : {totals['missing']}")
-            print(f" Files failed      : {totals['failed']}")
-        print(f' Duration          : {time.monotonic() - started:.2f}s')
-        print()
-        if not args.check and totals['failed']:
-            print('Cleanup completed with failures.')
-        elif args.check:
-            print('File check completed.')
+            stat('Would delete' if args.dry_run else 'Deleted', totals['deleted'])
+            stat('Already missing', totals['missing'])
+            stat('Failed', totals['failed'])
+            stat('Database errors', totals['db_errors'])
+            stat('Space to free' if args.dry_run else 'Space freed', format_size(totals['bytes']))
+        stat('Duration', f'{time.monotonic() - started:.2f} s')
+        rule('=')
+
+        if args.check:
+            result = 'File check completed.'
+        elif args.dry_run:
+            result = 'Dry run finished. Nothing was deleted.'
+        elif totals['failed'] or totals['db_errors']:
+            result = 'Cleanup completed with failures. See ✗ lines above.'
         else:
-            print('Cleanup completed successfully.')
+            result = 'Cleanup completed successfully.'
+        print(f'  RESULT  {result}')
+        rule('=')
+
+    if not args.check and (totals['failed'] or totals['db_errors']):
+        sys.exit(1)
 
 
 if __name__ == '__main__':
