@@ -6,9 +6,11 @@ previews for images/PDFs/text-code, and a free-text scratchpad for notes.
 Built with Flask + SQLite — no external services, no third-party accounts,
 no database server to run.
 
-Zipline is meant to be **self-hosted**: clone it, run it on your own
-machine or your own server, and it's yours. There's no hosted version and
+Zipline is meant to be **self-hosted**: clone it and run it on
+your own machine or server. There's no hosted version and
 no accounts system beyond the users you create yourself.
+
+**Noncommercial use only. See [License](LICENSE).**
 
 ## Features
 
@@ -79,7 +81,9 @@ zipline/
 ├── users.json              # {username: {password, failed_logins, locked_until}} — auto-created
 │
 ├── guide.md                # the full self-hosting guide
-└── README.md               # README
+├── README.md               # README
+│
+└── LICENSE                 # License
 ```
 
 
@@ -108,12 +112,9 @@ it is **not** a multi-tenant service you sign up for. Each install:
 
 ## License
 
-No license file is currently included in this repository. Under default
-copyright law, that means no rights are granted to use, modify, or
-redistribute this code — viewing and forking on GitHub doesn't imply
-permission beyond that.
- 
-The intent is for this project to be usable for **personal use only**
-(no commercial use), with the name **Zipline** kept as-is in any copy or
-fork. That intent isn't yet formalized as an actual license — until a
-LICENSE file is added, don't rely on this note as a substitute for one.
+Zipline is licensed under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). You can use, modify, and
+share it for noncommercial purposes. Commercial use is not allowed.
+
+Please keep the copyright notice in `LICENSE` in any copy or fork. I'd also
+appreciate it if forks keep the name "Zipline".
